@@ -2,10 +2,9 @@
 title: "Tools und Zugänge"
 category: onboarding
 tags: [tools, zugang, accounts]
-updated: 2026-01-06
+updated: 2026-09-06
 author: HR-Team
 ---
-
 ## Standard-Zugänge für neue Mitarbeiter
 
 - E-Mail-Postfach

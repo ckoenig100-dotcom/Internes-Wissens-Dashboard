@@ -1,0 +1,34 @@
+[
+  {
+    "slug": "sops",
+    "label": "SOPs"
+  },
+  {
+    "slug": "faq",
+    "label": "FAQs"
+  },
+  {
+    "slug": "technik",
+    "label": "Technik"
+  },
+  {
+    "slug": "hr",
+    "label": "HR"
+  },
+  {
+    "slug": "onboarding",
+    "label": "Onboarding"
+  },
+  {
+    "slug": "installationen",
+    "label": "Installationen"
+  },
+  {
+    "slug": "migration",
+    "label": "Migration"
+  },
+  {
+    "slug": "support",
+    "label": "Support"
+  }
+]

@@ -1,0 +1,140 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { listCategories, countByCategory } from '../../lib/knowledge';
+
+export const prerender = false;
+
+const counts = countByCategory();
+const categories = listCategories().map((c) => ({ ...c, count: counts[c.slug] || 0 }));
+---
+
+<AdminLayout title="Kategorien">
+  <h1 class="text-xl font-semibold">Kategorien</h1>
+  <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+    Kategorien entsprechen den Unterordnern in <code>/knowledge/</code>. Neue Kategorien stehen sofort im Upload-Formular und auf der Startseite zur Verfügung.
+  </p>
+
+  <div id="status-box" hidden class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"></div>
+  <div id="success-box" hidden class="mt-4 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 dark:border-green-900 dark:bg-green-950 dark:text-green-300"></div>
+
+  <form id="category-form" class="mt-6 flex flex-wrap items-end gap-3">
+    <div>
+      <label class="mb-1 block text-sm font-medium" for="label">Name der neuen Kategorie</label>
+      <input
+        id="label"
+        type="text"
+        required
+        placeholder="z.B. Marketing"
+        class="w-64 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+      />
+    </div>
+    <button
+      type="submit"
+      class="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+    >
+      Kategorie anlegen
+    </button>
+  </form>
+
+  <div class="mt-8 overflow-hidden rounded-2xl border border-slate-200 dark:border-slate-700">
+    <table class="w-full text-left text-sm">
+      <thead class="bg-slate-100 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+        <tr>
+          <th class="px-4 py-3 font-medium">Name</th>
+          <th class="px-4 py-3 font-medium">Ordner</th>
+          <th class="px-4 py-3 font-medium text-right">Dokumente</th>
+          <th class="px-4 py-3 font-medium text-right">Aktionen</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 bg-white dark:divide-slate-800 dark:bg-slate-900">
+        {categories.map((cat) => (
+          <tr data-category-row data-slug={cat.slug}>
+            <td class="px-4 py-3 font-medium">{cat.label}</td>
+            <td class="px-4 py-3 text-slate-500 dark:text-slate-400">knowledge/{cat.slug}/</td>
+            <td class="px-4 py-3 text-right">{cat.count}</td>
+            <td class="px-4 py-3 text-right">
+              <button
+                type="button"
+                data-delete-category
+                data-slug={cat.slug}
+                data-label={cat.label}
+                disabled={cat.count > 0}
+                title={cat.count > 0 ? 'Kategorie enthält noch Dokumente – erst verschieben oder löschen' : ''}
+                class="rounded-full border border-red-200 px-3 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:border-slate-200 disabled:text-slate-300 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950 dark:disabled:border-slate-700 dark:disabled:text-slate-600"
+              >
+                Löschen
+              </button>
+            </td>
+          </tr>
+        ))}
+        {categories.length === 0 && (
+          <tr><td colspan="4" class="px-4 py-6 text-center text-slate-400">Noch keine Kategorien vorhanden.</td></tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const base = import.meta.env.BASE_URL.replace(/\/$/, '') + '/';
+    const form = document.getElementById('category-form') as HTMLFormElement;
+    const labelInput = document.getElementById('label') as HTMLInputElement;
+    const statusBox = document.getElementById('status-box') as HTMLDivElement;
+    const successBox = document.getElementById('success-box') as HTMLDivElement;
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusBox.hidden = true;
+      successBox.hidden = true;
+
+      const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+      submitBtn.disabled = true;
+
+      try {
+        const res = await fetch(`${base}api/admin/create-category`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label: labelInput.value.trim() }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Anlegen fehlgeschlagen.');
+
+        window.location.href = `${base}admin/categories`;
+      } catch (err) {
+        statusBox.hidden = false;
+        statusBox.textContent = err instanceof Error ? err.message : 'Unbekannter Fehler.';
+        submitBtn.disabled = false;
+      }
+    });
+
+    document.querySelectorAll<HTMLButtonElement>('[data-delete-category]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const slug = btn.dataset.slug!;
+        const label = btn.dataset.label || slug;
+
+        const confirmed = window.confirm(
+          `Kategorie "${label}" wirklich unwiderruflich löschen?`,
+        );
+        if (!confirmed) return;
+
+        statusBox.hidden = true;
+        btn.disabled = true;
+
+        try {
+          const res = await fetch(`${base}api/admin/delete-category`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slug }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Löschen fehlgeschlagen.');
+
+          btn.closest('[data-category-row]')?.remove();
+        } catch (err) {
+          statusBox.hidden = false;
+          statusBox.textContent = err instanceof Error ? err.message : 'Unbekannter Fehler.';
+          btn.disabled = false;
+        }
+      });
+    });
+  </script>
+</AdminLayout>

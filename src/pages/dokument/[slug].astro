@@ -1,0 +1,100 @@
+---
+import '../../styles/global.css';
+import { findDocumentBySlug, getCategoryLabel } from '../../lib/knowledge';
+import { renderMarkdownPreview } from '../../lib/markdown-preview';
+
+export const prerender = false;
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '') + '/';
+const { slug } = Astro.params;
+const doc = slug ? findDocumentBySlug(slug) : null;
+
+if (!doc) {
+  return new Response('Dokument nicht gefunden.', { status: 404 });
+}
+
+const html = renderMarkdownPreview(doc.content);
+const attachmentUrl = doc.attachmentExtension
+  ? `${base}api/attachment/${doc.category}/${doc.slug}`
+  : null;
+---
+
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href={`${base}favicon.svg`} />
+    <link rel="icon" href={`${base}favicon.ico`} />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{doc.title} · Wissens-Dashboard</title>
+    <script is:inline>
+      (function () {
+        try {
+          const stored = localStorage.getItem('wd-theme');
+          const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+          const isDark = stored ? stored === 'dark' : prefersDark;
+          document.documentElement.classList.toggle('dark', isDark);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body class="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100 transition-colors">
+    <header class="flex items-center justify-between px-4 py-4 sm:px-8">
+      <a href={base} class="text-sm font-semibold tracking-wide text-slate-500 dark:text-slate-400">
+        ← Wissens-Dashboard
+      </a>
+      <button
+        id="theme-toggle"
+        type="button"
+        aria-label="Dark/Light Mode umschalten"
+        class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition-colors hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5 hidden dark:block">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />
+        </svg>
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="h-5 w-5 block dark:hidden">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />
+        </svg>
+      </button>
+    </header>
+
+    <main class="mx-auto max-w-3xl px-4 pb-24 sm:px-8">
+      <span class="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+        {getCategoryLabel(doc.category)}
+      </span>
+      <h1 class="mt-3 text-2xl font-semibold sm:text-3xl">{doc.title}</h1>
+      <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        {doc.author} · zuletzt aktualisiert {doc.updated || 'unbekannt'}
+        {attachmentUrl && (
+          <>
+            {' · '}
+            <a href={attachmentUrl} class="text-blue-600 hover:underline dark:text-blue-400">
+              📎 Original herunterladen
+            </a>
+          </>
+        )}
+      </p>
+
+      {doc.tags.length > 0 && (
+        <div class="mt-3 flex flex-wrap gap-2">
+          {doc.tags.map((tag) => (
+            <span class="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+              #{tag}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <div class="markdown-preview mt-8 max-w-none rounded-2xl border border-slate-200 bg-white px-6 py-5 dark:border-slate-700 dark:bg-slate-800" set:html={html} />
+    </main>
+
+    <script>
+      const themeToggle = document.getElementById('theme-toggle');
+      themeToggle?.addEventListener('click', () => {
+        const isDark = document.documentElement.classList.toggle('dark');
+        try {
+          localStorage.setItem('wd-theme', isDark ? 'dark' : 'light');
+        } catch {}
+      });
+    </script>
+  </body>
+</html>

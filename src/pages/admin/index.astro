@@ -1,0 +1,125 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { listDocuments, getCategoryLabel } from '../../lib/knowledge';
+
+export const prerender = false;
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '') + '/';
+const docs = listDocuments().sort((a, b) => b.updated.localeCompare(a.updated));
+---
+
+<AdminLayout title="Dokumente">
+  <div class="flex items-center justify-between gap-4">
+    <h1 class="text-xl font-semibold">Dokumente ({docs.length})</h1>
+    <a
+      href={`${base}admin/upload`}
+      class="rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+    >
+      + Neues Dokument
+    </a>
+  </div>
+
+  <div id="status-box" hidden class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"></div>
+
+  <div class="mt-6 overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700">
+    <table class="w-full min-w-[640px] text-left text-sm">
+      <thead class="bg-slate-100 text-xs uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+        <tr>
+          <th class="px-4 py-3 font-medium">Titel</th>
+          <th class="px-4 py-3 font-medium">Kategorie</th>
+          <th class="px-4 py-3 font-medium">Letzte Änderung</th>
+          <th class="px-4 py-3 font-medium">Autor</th>
+          <th class="px-4 py-3 font-medium text-right">Aktionen</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+        {docs.map((doc) => (
+          <tr data-row data-slug={doc.slug} data-category={doc.category} class="bg-white dark:bg-slate-900">
+            <td class="px-4 py-3 font-medium">{doc.title}</td>
+            <td class="px-4 py-3">
+              <span class="rounded-full bg-slate-100 px-2 py-1 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                {getCategoryLabel(doc.category)}
+              </span>
+            </td>
+            <td class="px-4 py-3 text-slate-500 dark:text-slate-400">{doc.updated || '—'}</td>
+            <td class="px-4 py-3 text-slate-500 dark:text-slate-400">{doc.author}</td>
+            <td class="px-4 py-3 text-right">
+              <div class="flex justify-end gap-2">
+                {doc.attachmentExtension && (
+                  <a
+                    href={`${base}api/admin/attachment/${doc.category}/${doc.slug}`}
+                    title={`Original (.${doc.attachmentExtension}) herunterladen`}
+                    class="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    📎 Original
+                  </a>
+                )}
+                <a
+                  href={`${base}admin/edit/${doc.category}/${doc.slug}`}
+                  class="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  Bearbeiten
+                </a>
+                <button
+                  type="button"
+                  data-delete
+                  data-slug={doc.slug}
+                  data-category={doc.category}
+                  data-title={doc.title}
+                  class="rounded-full border border-red-200 px-3 py-1 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
+                >
+                  Löschen
+                </button>
+              </div>
+            </td>
+          </tr>
+        ))}
+        {docs.length === 0 && (
+          <tr>
+            <td colspan="5" class="px-4 py-8 text-center text-slate-400 dark:text-slate-500">
+              Noch keine Dokumente vorhanden.
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+
+  <script>
+    const base = import.meta.env.BASE_URL.replace(/\/$/, '') + '/';
+    const statusBox = document.getElementById('status-box');
+
+    document.querySelectorAll<HTMLButtonElement>('[data-delete]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const slug = btn.dataset.slug!;
+        const category = btn.dataset.category!;
+        const title = btn.dataset.title || slug;
+
+        const confirmed = window.confirm(
+          `Dokument "${title}" wirklich unwiderruflich löschen?`,
+        );
+        if (!confirmed) return;
+
+        btn.disabled = true;
+        try {
+          const res = await fetch(`${base}api/admin/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ slug, category }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error || 'Löschen fehlgeschlagen.');
+
+          const row = btn.closest('[data-row]');
+          row?.remove();
+        } catch (err) {
+          if (statusBox) {
+            statusBox.hidden = false;
+            statusBox.textContent = err instanceof Error ? err.message : 'Unbekannter Fehler.';
+          }
+          btn.disabled = false;
+        }
+      });
+    });
+  </script>
+</AdminLayout>

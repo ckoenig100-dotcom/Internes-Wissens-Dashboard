@@ -1,0 +1,403 @@
+---
+import AdminLayout from '../../layouts/AdminLayout.astro';
+import { listCategories } from '../../lib/knowledge';
+
+const categories = listCategories();
+const maxUploadMb = Number(import.meta.env.MAX_DOCUMENT_UPLOAD_MB) || 10;
+---
+
+<AdminLayout title="Neues Dokument">
+  <h1 class="text-xl font-semibold">Neues Dokument</h1>
+  <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+    Lade eine Markdown-, PDF- oder Word-Datei hoch oder schreibe den Inhalt direkt im Editor.
+  </p>
+
+  <div id="status-box" hidden class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"></div>
+  <div id="convert-hint-box" hidden class="relative mt-4 overflow-hidden rounded-xl border border-blue-200 bg-blue-50 dark:border-blue-900 dark:bg-blue-950">
+    <div id="convert-progress-fill" class="convert-progress-fill"></div>
+    <p id="convert-hint-text" class="relative px-4 py-3 text-sm text-blue-700 dark:text-blue-300"></p>
+  </div>
+
+  <form id="doc-form" class="mt-6 grid gap-6 lg:grid-cols-2">
+    <div class="space-y-4">
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="file-input">Datei hochladen (optional)</label>
+        <input
+          id="file-input"
+          type="file"
+          accept=".md,text/markdown,.pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+          class="block w-full text-sm text-slate-600 file:mr-3 file:rounded-full file:border-0 file:bg-slate-100 file:px-4 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200 dark:text-slate-300 dark:file:bg-slate-800 dark:file:text-slate-200 dark:hover:file:bg-slate-700"
+        />
+        <p class="mt-1 text-xs text-slate-400 dark:text-slate-500">
+          .md: Frontmatter wird direkt übernommen. .pdf/.docx (max. {maxUploadMb} MB): Titel, Kategorie, Tags und Markdown-Inhalt werden von Claude vorgeschlagen — bitte vor dem Speichern prüfen.
+        </p>
+        <label id="keep-attachment-row" hidden class="mt-2 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+          <input id="keep-attachment" type="checkbox" checked class="rounded border-slate-300 dark:border-slate-600" />
+          Original-Datei zusätzlich als Anhang speichern
+        </label>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="title">Titel</label>
+        <input
+          id="title"
+          name="title"
+          type="text"
+          required
+          class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+        />
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="mb-1 block text-sm font-medium" for="category">Kategorie</label>
+          <select
+            id="category"
+            name="category"
+            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+          >
+            {categories.map((cat) => (
+              <option value={cat.slug}>{cat.label}</option>
+            ))}
+          </select>
+          <a href={`${import.meta.env.BASE_URL.replace(/\/$/, '')}/admin/categories`} class="mt-1 inline-block text-xs text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300">
+            + Neue Kategorie anlegen
+          </a>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium" for="author">Autor</label>
+          <input
+            id="author"
+            name="author"
+            type="text"
+            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="tags">Tags (Komma-getrennt)</label>
+        <input
+          id="tags"
+          name="tags"
+          type="text"
+          placeholder="z.B. urlaub, hr, antrag"
+          class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+        />
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="content">Inhalt (Markdown)</label>
+        <textarea
+          id="content"
+          name="content"
+          rows="16"
+          required
+          class="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
+        ></textarea>
+      </div>
+
+      <input type="hidden" id="filename" />
+
+      <button
+        type="submit"
+        class="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+      >
+        Dokument speichern
+      </button>
+    </div>
+
+    <div>
+      <span class="mb-1 block text-sm font-medium">Vorschau</span>
+      <div
+        id="preview"
+        class="markdown-preview h-full min-h-[420px] max-w-none rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
+      ></div>
+    </div>
+  </form>
+
+  <script define:vars={{ categorySlugs: categories.map((c) => c.slug), maxUploadMb }}>
+    window.__categorySlugs = categorySlugs;
+    window.__maxUploadMb = maxUploadMb;
+  </script>
+  <script>
+    import { parseFrontmatter } from '../../lib/frontmatter';
+    import { renderMarkdownPreview } from '../../lib/markdown-preview';
+
+    const base = import.meta.env.BASE_URL.replace(/\/$/, '') + '/';
+    const categorySlugs = (window as any).__categorySlugs as string[];
+    const maxUploadMb = (window as any).__maxUploadMb as number;
+
+    const form = document.getElementById('doc-form') as HTMLFormElement;
+    const fileInput = document.getElementById('file-input') as HTMLInputElement;
+    const titleInput = document.getElementById('title') as HTMLInputElement;
+    const categorySelect = document.getElementById('category') as HTMLSelectElement;
+    const tagsInput = document.getElementById('tags') as HTMLInputElement;
+    const authorInput = document.getElementById('author') as HTMLInputElement;
+    const contentTextarea = document.getElementById('content') as HTMLTextAreaElement;
+    const previewDiv = document.getElementById('preview') as HTMLDivElement;
+    const statusBox = document.getElementById('status-box') as HTMLDivElement;
+    const convertHintBox = document.getElementById('convert-hint-box') as HTMLDivElement;
+    const progressFill = document.getElementById('convert-progress-fill') as HTMLDivElement;
+    const hintText = document.getElementById('convert-hint-text') as HTMLParagraphElement;
+    const filenameHidden = document.getElementById('filename') as HTMLInputElement;
+    const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+    const keepAttachmentRow = document.getElementById('keep-attachment-row') as HTMLLabelElement;
+    const keepAttachmentCheckbox = document.getElementById('keep-attachment') as HTMLInputElement;
+
+    function updatePreview() {
+      previewDiv.innerHTML = renderMarkdownPreview(contentTextarea.value) || '<p class="text-slate-400">Noch kein Inhalt.</p>';
+    }
+    contentTextarea.addEventListener('input', updatePreview);
+    updatePreview();
+
+    let originalOfficeFile: File | null = null;
+
+    function fileToBase64(file: File): Promise<string> {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = reader.result as string;
+          // "data:<mime>;base64,AAAA..." -> nur den Teil nach dem Komma behalten
+          resolve(result.slice(result.indexOf(',') + 1));
+        };
+        reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function handleMarkdownFile(file: File) {
+      originalOfficeFile = null;
+      keepAttachmentRow.hidden = true;
+      const text = await file.text();
+      const { data, content } = parseFrontmatter(text);
+
+      if (typeof data.title === 'string') titleInput.value = data.title;
+      if (typeof data.category === 'string' && categorySlugs.includes(data.category)) categorySelect.value = data.category;
+      if (Array.isArray(data.tags)) tagsInput.value = data.tags.join(', ');
+      if (typeof data.author === 'string') authorInput.value = data.author;
+
+      contentTextarea.value = content;
+      filenameHidden.value = file.name.replace(/\.md$/i, '');
+      updatePreview();
+    }
+
+    const UPLOAD_RANGE_MAX = 20;
+    const ANALYSIS_RANGE_MAX = 92;
+
+    // Grobe Schätzung, keine exakte Vorhersage: Baseline für Netzwerk/n8n-Overhead
+    // plus ein Aufschlag je MB, da größere Dokumente mehr Inhalt für Claude bedeuten
+    // (mehr zu lesen und mehr Markdown zu generieren).
+    function estimateAnalysisSeconds(fileSizeBytes: number): number {
+      const mb = fileSizeBytes / (1024 * 1024);
+      return Math.max(6, 8 + mb * 20);
+    }
+
+    function convertDocumentWithProgress(file: File): Promise<any> {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${base}api/admin/convert-document`);
+
+        let analysisTimer: number | undefined;
+
+        function startAnalysisPhase() {
+          progressFill.classList.add('convert-progress-fill--busy');
+          const estimatedSeconds = estimateAnalysisSeconds(file.size);
+          const tau = estimatedSeconds / 2;
+          const startedAt = Date.now();
+
+          const tick = () => {
+            const elapsed = (Date.now() - startedAt) / 1000;
+            const fraction = 1 - Math.exp(-elapsed / tau);
+            const width = UPLOAD_RANGE_MAX + (ANALYSIS_RANGE_MAX - UPLOAD_RANGE_MAX) * fraction;
+            progressFill.style.width = `${width}%`;
+            hintText.textContent =
+              `Wird von Claude analysiert und in Markdown umgewandelt … ` +
+              `${Math.round(elapsed)}s (geschätzt ca. ${Math.round(estimatedSeconds)}s)`;
+          };
+
+          tick();
+          analysisTimer = window.setInterval(tick, 200);
+        }
+
+        function stopAnalysisPhase() {
+          if (analysisTimer !== undefined) {
+            window.clearInterval(analysisTimer);
+            analysisTimer = undefined;
+          }
+        }
+
+        xhr.upload.addEventListener('progress', (e) => {
+          if (!e.lengthComputable) return;
+          const uploadPct = Math.round((e.loaded / e.total) * 100);
+          if (uploadPct >= 100) {
+            progressFill.style.width = `${UPLOAD_RANGE_MAX}%`;
+            if (analysisTimer === undefined) startAnalysisPhase();
+          } else {
+            const width = (uploadPct / 100) * UPLOAD_RANGE_MAX;
+            progressFill.style.width = `${width}%`;
+            hintText.textContent = `Datei wird hochgeladen … ${uploadPct}%`;
+          }
+        });
+
+        xhr.upload.addEventListener('load', () => {
+          // Fallback für sehr kleine Dateien, bei denen manche Browser kein
+          // separates 'progress'-Event mit 100% feuern.
+          progressFill.style.width = `${UPLOAD_RANGE_MAX}%`;
+          if (analysisTimer === undefined) startAnalysisPhase();
+        });
+
+        xhr.addEventListener('load', () => {
+          stopAnalysisPhase();
+
+          const contentType = xhr.getResponseHeader('content-type') || '';
+          if (!contentType.includes('application/json')) {
+            reject(new Error(
+              xhr.status === 413
+                ? 'Datei zu groß für den Server (Proxy-Limit). Bitte kleinere Datei verwenden oder Admin informieren.'
+                : `Unerwartete Antwort vom Server (Status ${xhr.status}).`,
+            ));
+            return;
+          }
+          try {
+            const json = JSON.parse(xhr.responseText);
+            if (xhr.status < 200 || xhr.status >= 300) {
+              reject(new Error(json.error || 'Umwandlung fehlgeschlagen.'));
+            } else {
+              resolve(json);
+            }
+          } catch {
+            reject(new Error('Antwort konnte nicht gelesen werden.'));
+          }
+        });
+
+        xhr.addEventListener('error', () => {
+          stopAnalysisPhase();
+          reject(new Error('Verbindung zum Server fehlgeschlagen.'));
+        });
+
+        const formData = new FormData();
+        formData.append('file', file);
+        xhr.send(formData);
+      });
+    }
+
+    async function handleOfficeFile(file: File) {
+      originalOfficeFile = null;
+      keepAttachmentRow.hidden = true;
+      statusBox.hidden = true;
+      convertHintBox.hidden = false;
+      progressFill.style.width = '0%';
+      progressFill.classList.remove('convert-progress-fill--busy');
+      hintText.textContent = 'Datei wird hochgeladen …';
+      fileInput.disabled = true;
+      submitBtn.disabled = true;
+
+      try {
+        const data = await convertDocumentWithProgress(file);
+
+        progressFill.classList.remove('convert-progress-fill--busy');
+        progressFill.style.width = '100%';
+        originalOfficeFile = file;
+        keepAttachmentRow.hidden = false;
+        keepAttachmentCheckbox.checked = true;
+
+        titleInput.value = data.title || '';
+        if (data.category && categorySlugs.includes(data.category)) categorySelect.value = data.category;
+        tagsInput.value = Array.isArray(data.tags) ? data.tags.join(', ') : '';
+        contentTextarea.value = data.markdown || '';
+        filenameHidden.value = '';
+        updatePreview();
+
+        if (data.newCategorySuggestion) {
+          hintText.textContent = `Übernommen — bitte prüfen. Hinweis: Keine bestehende Kategorie passt perfekt; Claude schlägt "${data.newCategorySuggestion}" als neue Kategorie vor (kann unter Kategorien angelegt werden).`;
+        } else {
+          hintText.textContent = 'Übernommen — bitte Titel, Kategorie, Tags und Inhalt vor dem Speichern prüfen.';
+        }
+      } catch (err) {
+        convertHintBox.hidden = true;
+        progressFill.classList.remove('convert-progress-fill--busy');
+        progressFill.style.width = '0%';
+        statusBox.hidden = false;
+        statusBox.textContent = err instanceof Error ? err.message : 'Unbekannter Fehler bei der Umwandlung.';
+      } finally {
+        fileInput.disabled = false;
+        submitBtn.disabled = false;
+      }
+    }
+
+    fileInput.addEventListener('change', async () => {
+      const file = fileInput.files?.[0];
+      if (!file) return;
+
+      statusBox.hidden = true;
+      convertHintBox.hidden = true;
+
+      const extension = file.name.toLowerCase().split('.').pop();
+
+      if (extension === 'md') {
+        await handleMarkdownFile(file);
+        return;
+      }
+
+      if (extension === 'pdf' || extension === 'docx') {
+        if (file.size > maxUploadMb * 1024 * 1024) {
+          statusBox.hidden = false;
+          statusBox.textContent = `Datei zu groß (${(file.size / (1024 * 1024)).toFixed(1)} MB, max ${maxUploadMb} MB).`;
+          fileInput.value = '';
+          return;
+        }
+        await handleOfficeFile(file);
+        return;
+      }
+
+      statusBox.hidden = false;
+      statusBox.textContent = 'Nicht unterstütztes Dateiformat. Bitte .md, .pdf oder .docx verwenden.';
+      fileInput.value = '';
+    });
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusBox.hidden = true;
+      submitBtn.disabled = true;
+
+      const payload: Record<string, unknown> = {
+        mode: 'create',
+        title: titleInput.value.trim(),
+        category: categorySelect.value,
+        tags: tagsInput.value.split(',').map((t) => t.trim()).filter(Boolean),
+        author: authorInput.value.trim(),
+        content: contentTextarea.value,
+        filename: filenameHidden.value || undefined,
+      };
+
+      try {
+        if (originalOfficeFile && keepAttachmentCheckbox.checked) {
+          payload.attachmentBase64 = await fileToBase64(originalOfficeFile);
+          payload.attachmentFilename = originalOfficeFile.name;
+        }
+      } catch (err) {
+        statusBox.hidden = false;
+        statusBox.textContent = err instanceof Error ? err.message : 'Original-Datei konnte nicht angehängt werden.';
+        submitBtn.disabled = false;
+        return;
+      }
+
+      try {
+        const res = await fetch(`${base}api/admin/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Fehler beim Speichern.');
+
+        window.location.href = `${base}admin`;
+      } catch (err) {
+        statusBox.hidden = false;
+        statusBox.textContent = err instanceof Error ? err.message : 'Unbekannter Fehler.';
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</AdminLayout>

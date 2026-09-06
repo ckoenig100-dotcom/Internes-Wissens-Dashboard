@@ -1,0 +1,176 @@
+---
+import AdminLayout from '../../../../layouts/AdminLayout.astro';
+import { getDocument, listCategories } from '../../../../lib/knowledge';
+
+export const prerender = false;
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '') + '/';
+const categories = listCategories();
+const { category, slug } = Astro.params;
+const doc = category && slug ? getDocument(category, slug) : null;
+
+if (!doc) {
+  return Astro.redirect(`${base}admin?error=not-found`);
+}
+---
+
+<AdminLayout title={`Bearbeiten: ${doc.title}`}>
+  <h1 class="text-xl font-semibold">Dokument bearbeiten</h1>
+  <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">
+    {doc.category}/{doc.slug}.md
+    {doc.attachmentExtension && (
+      <>
+        {' · '}
+        <a
+          href={`${base}api/admin/attachment/${doc.category}/${doc.slug}`}
+          class="text-blue-600 hover:underline dark:text-blue-400"
+        >
+          📎 Original (.{doc.attachmentExtension}) herunterladen
+        </a>
+      </>
+    )}
+  </p>
+
+  <div id="status-box" hidden class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"></div>
+
+  <form id="doc-form" class="mt-6 grid gap-6 lg:grid-cols-2">
+    <div class="space-y-4">
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="title">Titel</label>
+        <input
+          id="title"
+          type="text"
+          required
+          value={doc.title}
+          class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+        />
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="mb-1 block text-sm font-medium" for="category">Kategorie</label>
+          <select
+            id="category"
+            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+          >
+            {categories.map((cat) => (
+              <option value={cat.slug} selected={cat.slug === doc.category}>{cat.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label class="mb-1 block text-sm font-medium" for="author">Autor</label>
+          <input
+            id="author"
+            type="text"
+            value={doc.author}
+            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+          />
+        </div>
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="tags">Tags (Komma-getrennt)</label>
+        <input
+          id="tags"
+          type="text"
+          value={doc.tags.join(', ')}
+          class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm dark:border-slate-700 dark:bg-slate-800"
+        />
+      </div>
+
+      <div>
+        <label class="mb-1 block text-sm font-medium" for="content">Inhalt (Markdown)</label>
+        <textarea
+          id="content"
+          rows="16"
+          required
+          class="w-full resize-y rounded-lg border border-slate-200 bg-white px-3 py-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-800"
+        >{doc.content}</textarea>
+      </div>
+
+      <div class="flex gap-3">
+        <button
+          type="submit"
+          class="rounded-full bg-slate-900 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-slate-700 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+        >
+          Änderungen speichern
+        </button>
+        <a
+          href={`${base}admin`}
+          class="rounded-full border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          Abbrechen
+        </a>
+      </div>
+    </div>
+
+    <div>
+      <span class="mb-1 block text-sm font-medium">Vorschau</span>
+      <div
+        id="preview"
+        class="markdown-preview h-full min-h-[420px] max-w-none rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm dark:border-slate-700 dark:bg-slate-800"
+      ></div>
+    </div>
+  </form>
+
+  <script define:vars={{ originalSlug: doc.slug, originalCategory: doc.category }}>
+    window.__editContext = { originalSlug, originalCategory };
+  </script>
+  <script>
+    import { renderMarkdownPreview } from '../../../../lib/markdown-preview';
+
+    const { originalSlug, originalCategory } = (window as any).__editContext;
+    const base = import.meta.env.BASE_URL.replace(/\/$/, '') + '/';
+
+    const form = document.getElementById('doc-form') as HTMLFormElement;
+    const titleInput = document.getElementById('title') as HTMLInputElement;
+    const categorySelect = document.getElementById('category') as HTMLSelectElement;
+    const tagsInput = document.getElementById('tags') as HTMLInputElement;
+    const authorInput = document.getElementById('author') as HTMLInputElement;
+    const contentTextarea = document.getElementById('content') as HTMLTextAreaElement;
+    const previewDiv = document.getElementById('preview') as HTMLDivElement;
+    const statusBox = document.getElementById('status-box') as HTMLDivElement;
+
+    function updatePreview() {
+      previewDiv.innerHTML = renderMarkdownPreview(contentTextarea.value) || '<p class="text-slate-400">Noch kein Inhalt.</p>';
+    }
+    contentTextarea.addEventListener('input', updatePreview);
+    updatePreview();
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusBox.hidden = true;
+
+      const payload = {
+        mode: 'update',
+        slug: originalSlug,
+        category: originalCategory,
+        newCategory: categorySelect.value !== originalCategory ? categorySelect.value : undefined,
+        title: titleInput.value.trim(),
+        tags: tagsInput.value.split(',').map((t) => t.trim()).filter(Boolean),
+        author: authorInput.value.trim(),
+        content: contentTextarea.value,
+      };
+
+      const submitBtn = form.querySelector('button[type="submit"]') as HTMLButtonElement;
+      submitBtn.disabled = true;
+
+      try {
+        const res = await fetch(`${base}api/admin/save`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Fehler beim Speichern.');
+
+        window.location.href = `${base}admin`;
+      } catch (err) {
+        statusBox.hidden = false;
+        statusBox.textContent = err instanceof Error ? err.message : 'Unbekannter Fehler.';
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</AdminLayout>
