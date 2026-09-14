@@ -1,7 +1,7 @@
 ---
 title: "Setup-Helperscripts für das Aufsetzen des Entwicklerarbeitsplatzes"
 category: agentic
-tags: [agentic, freud, communnity.claude, hugo, EAP]
+tags: [agentic, freud, communnity.claude, hugo, EAP, setup, claude]
 updated: 2026-09-07
 author: Koenig Christian
 ---
